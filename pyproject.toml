@@ -30,7 +30,7 @@ dependencies = [
     "datasets",
     "httpx[http2]",
     "mcp[cli]",
-    "megatron-bridge @ git+https://github.com/fzyzcjy/Megatron-Bridge.git@dev_rl ; sys_platform == 'linux'",
+    "megatron-bridge ; sys_platform == 'linux'",
     "memray",
     "nvidia-modelopt>=0.37.0 ; sys_platform == 'linux'",
     "omegaconf",
@@ -56,6 +56,11 @@ fsdp = [
 
 [tool.uv]
 default-groups = []
+
+[tool.uv.sources]
+# Vendor Megatron-Bridge to avoid flaky server-side GitHub fetches during `uv sync`.
+# Source: https://github.com/fzyzcjy/Megatron-Bridge.git, branch dev_rl, commit 35b4ebfc486fb15dcc0273ceea804c3606be948a.
+megatron-bridge = { path = "external/Megatron-Bridge" }
 
 [tool.setuptools]
 include-package-data = true

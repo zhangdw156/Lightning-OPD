@@ -1,0 +1,8 @@
+Repository: https://github.com/fzyzcjy/Megatron-Bridge.git
+Branch: dev_rl
+Commit: 35b4ebfc486fb15dcc0273ceea804c3606be948a
+Vendored for: local uv sync without fetching Megatron-Bridge from GitHub on flaky servers.
+Local patch: removed upstream debugging-only [tool.uv.sources] VCS overrides from pyproject.toml.
+Local patch: pinned nvidia-resiliency-ext==0.4.1 to match upstream VCS source version via PyPI.
+Local packaging: pruned vendored tree to pyproject.toml, README.md, LICENSE, src/, and this provenance file.
+Local packaging: omitted source-tree README docs that are not required for path installation.
