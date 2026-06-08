@@ -1,19 +1,22 @@
+# Legacy pip compatibility. The canonical dependency list lives in pyproject.toml.
 accelerate
 blobfile
 datasets
 httpx[http2]
 mcp[cli]
-megatron-bridge @ git+https://github.com/fzyzcjy/Megatron-Bridge.git@dev_rl
-memray  # needed for debugging (but is lightweight), we can put it to dev mode when using pyproject.toml
-nvidia-modelopt[torch]>=0.37.0  # needed by megatron-bridge
+megatron-bridge @ git+https://github.com/fzyzcjy/Megatron-Bridge.git@dev_rl ; sys_platform == "linux"
+memray
+nvidia-modelopt>=0.37.0 ; sys_platform == "linux"
 omegaconf
 pillow
 pylatexenc
 pyyaml
 ray[default]
-ring_flash_attn
-sglang-router>=0.2.3
+ring-flash-attn ; sys_platform == "linux"
+sglang ; sys_platform == "linux"
+sglang-router>=0.2.3 ; sys_platform == "linux"
 tensorboard
+torch>=2.0 ; sys_platform == "linux"
 transformers
 wandb
-liger_kernel
+liger-kernel ; sys_platform == "linux"

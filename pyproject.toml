@@ -1,10 +1,67 @@
 [build-system]
 requires = [
-    "packaging",
-    "setuptools >= 49.4.0",
+    "setuptools >= 77.0.0",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "slime"
+version = "0.1.0"
+description = "Lightning OPD training pipeline built on slime."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "slime Team" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Distributed Computing",
+]
+dependencies = [
+    "accelerate",
+    "blobfile",
+    "datasets",
+    "httpx[http2]",
+    "mcp[cli]",
+    "megatron-bridge @ git+https://github.com/fzyzcjy/Megatron-Bridge.git@dev_rl ; sys_platform == 'linux'",
+    "memray",
+    "nvidia-modelopt>=0.37.0 ; sys_platform == 'linux'",
+    "omegaconf",
+    "pillow",
+    "pylatexenc",
+    "pyyaml",
+    "ray[default]",
+    "ring-flash-attn ; sys_platform == 'linux'",
+    "sglang ; sys_platform == 'linux'",
+    "sglang-router>=0.2.3 ; sys_platform == 'linux'",
+    "tensorboard",
+    "torch>=2.0 ; sys_platform == 'linux'",
+    "transformers",
+    "wandb",
+    "liger-kernel ; sys_platform == 'linux'",
+]
+
+[project.optional-dependencies]
+fsdp = [
+    "torch>=2.0",
+]
+
+
+[tool.uv]
+default-groups = []
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["slime*", "slime_plugins*"]
 
 [tool.isort]
 profile = "black"  # black-compatible

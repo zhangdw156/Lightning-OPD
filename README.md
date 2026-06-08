@@ -65,24 +65,33 @@ At the 4B scale, this reduces total GPU hours from **72 to 20** (3.6x speedup). 
 ```bash
 git clone https://github.com/jet-ai-projects/Lightning-OPD.git
 cd Lightning-OPD
+
+# Main Lightning OPD runtime environment (Python 3.10 is pinned in .python-version)
+uv sync
+source .venv/bin/activate
 ```
 
-The pipeline uses three separate environments to avoid dependency conflicts:
+`uv sync` installs this repository in editable mode and prepares the default runtime used by the
+Lightning OPD training path. The full training stack is intended for a Linux GPU server with CUDA;
+on a local macOS laptop, CUDA-only dependencies are not expected to be runnable.
+
+The full reproduction pipeline still uses separate environments for the data-curation and SFT
+stages to avoid dependency conflicts:
 
 ### Environment 1: `curation` (Step 0, 1, 3 — data generation)
 
 ```bash
-conda create -n curation python=3.10 -y
-conda activate curation
-pip install vllm transformers pyarrow pandas tqdm datasets
+uv venv .venv-curation --python 3.10
+source .venv-curation/bin/activate
+uv pip install vllm transformers pyarrow pandas tqdm datasets
 ```
 
 ### Environment 2: `llamafactory` (Step 2 — SFT training)
 
 ```bash
-conda create -n llamafactory python=3.10 -y
-conda activate llamafactory
-pip install llamafactory torch transformers
+uv venv .venv-llamafactory --python 3.10
+source .venv-llamafactory/bin/activate
+uv pip install llamafactory torch transformers
 ```
 
 ### Environment 3: Docker container (Step 4, 5 — logprob precomputation & Lightning OPD training)
@@ -96,7 +105,8 @@ bash run_docker.sh
 Inside the container (sglang, Megatron, torch are pre-installed):
 
 ```bash
-pip install -e .
+uv sync
+source .venv/bin/activate
 ```
 
 ## Quick Reproduction (Qwen3-4B-Base)
@@ -245,7 +255,7 @@ After this step, you have a parquet file with precomputed `teacher_log_probs` fo
 
 ### Step 5: Lightning OPD Training
 
-> Environment: **container** (`bash run_docker.sh`, with `pip install -e .`)
+> Environment: **container** (`bash run_docker.sh`, with `uv sync`)
 
 Train the student model using precomputed data. No teacher server required.
 

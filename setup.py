@@ -1,16 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import sys
 import platform
+import sys
 
-from setuptools import find_packages, setup
-from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
-
-
-def _fetch_requirements(path):
-    with open(path, "r") as fd:
-        return [r.strip() for r in fd.readlines() if r.strip() and not r.startswith("#")]
+from setuptools import setup
+from setuptools.command.bdist_wheel import bdist_wheel as _bdist_wheel
 
 
 # Custom wheel class to modify the wheel name
@@ -31,27 +26,4 @@ class bdist_wheel(_bdist_wheel):
         return python_version, abi_tag, platform_tag
 
 
-# Setup configuration
-setup(
-    author="slime Team",
-    name="slime",
-    version="0.1.0",
-    packages=find_packages(include=["slime*", "slime_plugins*"]),
-    include_package_data=True,
-    install_requires=_fetch_requirements("requirements.txt"),
-    extras_require={
-        "fsdp": [
-            "torch>=2.0",
-        ]
-    },
-    python_requires=">=3.10",
-    classifiers=[
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Environment :: GPU :: NVIDIA CUDA",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        "Topic :: System :: Distributed Computing",
-    ],
-    cmdclass={"bdist_wheel": bdist_wheel},
-)
+setup(cmdclass={"bdist_wheel": bdist_wheel})
