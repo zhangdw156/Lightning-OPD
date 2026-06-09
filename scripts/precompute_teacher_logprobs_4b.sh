@@ -18,12 +18,20 @@ set -euo pipefail
 : "${ROLLOUT_PARQUET:?Set ROLLOUT_PARQUET to the student rollout parquet}"
 : "${OUTPUT_DIR:?Set OUTPUT_DIR for the output parquet}"
 
-# Start teacher server
+TEACHER_HOST="${TEACHER_HOST:-127.0.0.1}"
+TEACHER_PORT="${TEACHER_PORT:-13141}"
+TEACHER_URL="${TEACHER_URL:-http://${TEACHER_HOST}:${TEACHER_PORT}/generate}"
+MAX_RESPONSE_LEN="${MAX_RESPONSE_LEN:-4096}"
+CONCURRENCY="${CONCURRENCY:-64}"
+
+# Start teacher server. For 4x H20, use TEACHER_TP=4.
 bash scripts/serve_teacher_8b.sh
 
 python3 data_curation/prepare_lightning_opd.py \
     --tokenizer-path "${SFT_CHECKPOINT}" \
     --input-parquet "${ROLLOUT_PARQUET}" \
     --output-dir "${OUTPUT_DIR}" \
+    --max-response-len "${MAX_RESPONSE_LEN}" \
     --compute-teacher-logprobs \
-    --teacher-url http://127.0.0.1:13141/generate
+    --teacher-url "${TEACHER_URL}" \
+    --concurrency "${CONCURRENCY}"

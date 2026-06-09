@@ -1,0 +1,222 @@
+# 4x H20 96GB / 24h Lightning OPD MVP
+
+This MVP is a shortened, end-to-end reproduction path for one 4-GPU H20 node. It is designed to demonstrate the paper pipeline mechanics under a 24h budget, not to reproduce the full paper table numbers.
+
+## Target
+
+- Hardware: 4 x H20 96GB on one node.
+- Student: `Qwen/Qwen3-4B-Base`.
+- Teacher: `Qwen/Qwen3-8B`.
+- Teacher consistency: the same `Qwen/Qwen3-8B` is used for SFT data generation and teacher-logprob precomputation.
+- Single environment policy: run root `uv sync` once on the GPU server; do not create separate curation/SFT environments.
+
+## Server setup
+
+```bash
+cd /path/to/Lightning-OPD
+uv sync
+source .venv/bin/activate
+
+export MODEL_ROOT=/data/zhangdw12/models
+export STUDENT_BASE_MODEL=${MODEL_ROOT}/Qwen3-4B-Base
+export TEACHER_MODEL=${MODEL_ROOT}/Qwen3-8B
+```
+
+This project declares the curation, SFT, and Lightning OPD dependencies in the root `pyproject.toml`, including `vllm`, `llamafactory`, `deepspeed`, `pandas`, `pyarrow`, `tqdm`, and `huggingface-hub`. The MVP commands use local model paths under `${MODEL_ROOT}` and should not download Qwen model weights again.
+
+If your local model directory names differ, adjust only `STUDENT_BASE_MODEL` and `TEACHER_MODEL`.
+
+If you run with `uv sync --locked`, update `uv.lock` on the GPU server first because this MVP changes `pyproject.toml` dependencies.
+
+## Stage 0: prepare local datasets and prompts
+
+Use local dataset files. Download datasets into the project directory with `hf` / `huggingface-cli` before running the training stages. Recommended layout:
+
+```text
+Lightning-OPD/
+  data/
+    raw_datasets/
+      OpenThoughts3-1.2M/     # local HF dataset files, usually parquet shards
+      dapo-math-17k/          # local HF dataset files, includes dapo-math-17k.jsonl
+```
+
+Example download commands, if the datasets are not already present:
+
+```bash
+mkdir -p data/raw_datasets
+
+hf download open-thoughts/OpenThoughts3-1.2M \
+  --repo-type dataset \
+  --local-dir data/raw_datasets/OpenThoughts3-1.2M
+
+hf download zhuzilin/dapo-math-17k \
+  --repo-type dataset \
+  --include "*.jsonl" \
+  --local-dir data/raw_datasets/dapo-math-17k
+```
+
+Set local dataset paths. For OpenThoughts3, the MVP only needs 20k prompts, so one parquet/jsonl shard with at least 20k rows is enough. If your local download has a different file name, change `OPENTHOUGHTS_LOCAL_FILE` only.
+
+```bash
+mkdir -p data/prompts
+
+export OPENTHOUGHTS_LOCAL_FILE=$(find data/raw_datasets/OpenThoughts3-1.2M -type f \( -name "*.parquet" -o -name "*.jsonl" \) | sort | head -n 1)
+export DAPO_PROMPTS=data/raw_datasets/dapo-math-17k/dapo-math-17k.jsonl
+
+test -f "${OPENTHOUGHTS_LOCAL_FILE}"
+test -f "${DAPO_PROMPTS}"
+```
+
+Extract a 20k SFT prompt subset from the local OpenThoughts3 file:
+
+```bash
+python scripts/prepare_sft_prompts.py \
+  --input "${OPENTHOUGHTS_LOCAL_FILE}" \
+  --output data/prompts/openthoughts3_mvp20k.jsonl \
+  --num-samples 20000
+```
+
+## Stage 1: generate MVP SFT data
+
+Run one vLLM worker per GPU. H20 96GB should fit Qwen3-8B per GPU; keep `TP_SIZE=1` for throughput.
+
+```bash
+TEACHER_MODEL="${TEACHER_MODEL}" \
+SFT_PROMPTS=data/prompts/openthoughts3_mvp20k.jsonl \
+OUTPUT_DIR=data/sft_data_mvp_h20_raw \
+NUM_GPUS=4 \
+TP_SIZE=1 \
+bash scripts/generate_sft_data.sh \
+  --max-tokens 4096 \
+  --temperature 0.7 \
+  --top-p 0.9 \
+  --batch-size 16
+```
+
+Merge to the dataset name expected by the MVP LlamaFactory config:
+
+```bash
+python data_curation/merge.py \
+  --input-dir data/sft_data_mvp_h20_raw \
+  --output data/sft_data/openthoughts3_mvp20k_qwen3-8b.parquet \
+  --max-tokens 8192
+```
+
+## Stage 2: MVP SFT
+
+This config runs 300 SFT steps on 4 GPUs with cutoff length 8192 and global batch 64.
+
+```bash
+CONFIG_YAML=qwen3-4b-base-open-thoughts3-qwen3-8b-mvp-h20.yaml \
+MODEL_NAME_OR_PATH="${STUDENT_BASE_MODEL}" \
+OUTPUT_DIR=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20 \
+NUM_NODES=1 \
+NUM_GPUS=4 \
+MASTER_ADDR=localhost \
+bash configs/sft/run_sft.sh
+```
+
+Pick the latest or best checkpoint under:
+
+```bash
+ls -dt checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/* | head
+```
+
+Export it for later stages:
+
+```bash
+export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/<checkpoint-dir>
+```
+
+## Stage 3: collect MVP rollouts
+
+Collect 6.4k OPD prompts, matching the MVP Lightning OPD config: `50 rollout steps * 128 batch = 6400 samples`.
+
+```bash
+SFT_CHECKPOINT="${SFT_CHECKPOINT}" \
+OPD_PROMPTS="${DAPO_PROMPTS}" \
+OUTPUT_DIR=data/rollouts_mvp_h20_raw \
+NUM_GPUS=4 \
+TP_SIZE=1 \
+bash scripts/collect_rollouts.sh \
+  --num-samples 6400 \
+  --max-tokens 2048 \
+  --temperature 0.8 \
+  --top-p 1.0 \
+  --batch-size 16
+```
+
+Merge:
+
+```bash
+python data_curation/merge.py \
+  --input-dir data/rollouts_mvp_h20_raw \
+  --output data/rollouts/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts.parquet \
+  --max-tokens 2048
+```
+
+## Stage 4: precompute teacher logprobs
+
+The 8B teacher server now defaults to `${MODEL_ROOT}/Qwen3-8B`; for 4 H20 GPUs use `TEACHER_TP=4`.
+
+```bash
+SFT_CHECKPOINT="${SFT_CHECKPOINT}" \
+ROLLOUT_PARQUET=data/rollouts/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts.parquet \
+OUTPUT_DIR=data/lightning_opd_mvp_h20 \
+TEACHER_MODEL="${TEACHER_MODEL}" \
+TEACHER_TP=4 \
+MAX_RESPONSE_LEN=2048 \
+CONCURRENCY=32 \
+bash scripts/precompute_teacher_logprobs_4b.sh
+```
+
+Expected final file:
+
+```bash
+export LIGHTNING_OPD_DATA=data/lightning_opd_mvp_h20/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts-lightning-opd-precomputed.parquet
+```
+
+After this stage, the teacher server is no longer needed.
+
+## Stage 5: MVP Lightning OPD training
+
+```bash
+export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/<checkpoint-dir>
+export LIGHTNING_OPD_DATA=data/lightning_opd_mvp_h20/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts-lightning-opd-precomputed.parquet
+
+python configs/lightning_opd/qwen3-4b-lightning-opd-mvp-h20.py
+```
+
+The MVP OPD config uses:
+
+- 4 actor GPUs.
+- Tensor parallel size 2.
+- 50 OPD steps.
+- Rollout batch size 128.
+- Global batch size 128.
+- Max response length 2048.
+- No live teacher server during OPD training.
+
+## Stage 6: convert MVP Megatron checkpoint to HuggingFace
+
+Use the saved iteration you want, for example `iter_0000050`.
+
+```bash
+MEGATRON_CKPT_DIR=/root/models/Qwen3-4B-Base-Open-Thoughts-Qwen3-8B-sft-mvp-h20_ckpt__qwen3-4b-lightning-opd-mvp-h20/iter_0000050 \
+HF_OUTPUT_DIR=checkpoints/qwen3-4b-lightning-opd-mvp-h20-hf \
+ORIGIN_HF_DIR="${SFT_CHECKPOINT}" \
+bash scripts/convert_megatron_to_hf.sh
+```
+
+## Success criteria
+
+The MVP is successful if all of these artifacts exist:
+
+```bash
+test -f data/sft_data/openthoughts3_mvp20k_qwen3-8b.parquet
+test -f data/rollouts/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts.parquet
+test -f data/lightning_opd_mvp_h20/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts-lightning-opd-precomputed.parquet
+test -d checkpoints/qwen3-4b-lightning-opd-mvp-h20-hf
+```
+
+This MVP should produce a trainable HF-format model and verify the key Lightning OPD claim operationally: teacher logprobs are computed once before OPD, and OPD training runs without a live teacher server.

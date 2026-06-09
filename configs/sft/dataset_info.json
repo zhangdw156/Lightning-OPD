@@ -12,5 +12,12 @@
     "columns": {
       "messages": "messages"
     }
+  },
+  "openthoughts3_mvp20k_qwen3-8b": {
+    "file_name": "data/sft_data/openthoughts3_mvp20k_qwen3-8b.parquet",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages"
+    }
   }
 }
