@@ -28,50 +28,39 @@ If your local model directory names differ, adjust only `STUDENT_BASE_MODEL` and
 
 If you run with `uv sync --locked`, update `uv.lock` on the GPU server first because this MVP changes `pyproject.toml` dependencies.
 
-## Stage 0: prepare local datasets and prompts
+## Stage 0: prepare local prompts without downloading full OpenThoughts3
 
-Use local dataset files. Download datasets into the project directory with `hf` / `huggingface-cli` before running the training stages. Recommended layout:
+The MVP only needs 20k SFT prompts, so do **not** download the full OpenThoughts3 dataset. Use HuggingFace streaming to write only the prompt subset into the project.
 
-```text
-Lightning-OPD/
-  data/
-    raw_datasets/
-      OpenThoughts3-1.2M/     # local HF dataset files, usually parquet shards
-      dapo-math-17k/          # local HF dataset files, includes dapo-math-17k.jsonl
-```
-
-Example download commands, if the datasets are not already present:
+DAPO-Math-17k is small enough to download as JSONL and is used later as OPD prompts.
 
 ```bash
-mkdir -p data/raw_datasets
+mkdir -p data/prompts data/raw_datasets
 
-hf download open-thoughts/OpenThoughts3-1.2M \
-  --repo-type dataset \
-  --local-dir data/raw_datasets/OpenThoughts3-1.2M
+# Stream only 20k prompts from OpenThoughts3; this avoids downloading the 14GB+ full dataset.
+python scripts/prepare_sft_prompts.py \
+  --hf-dataset open-thoughts/OpenThoughts3-1.2M \
+  --streaming \
+  --streaming-buffer-size 10000 \
+  --output data/prompts/openthoughts3_mvp20k.jsonl \
+  --num-samples 20000
 
+# Download only the DAPO JSONL prompt file(s), not a full dataset snapshot.
 hf download zhuzilin/dapo-math-17k \
   --repo-type dataset \
   --include "*.jsonl" \
   --local-dir data/raw_datasets/dapo-math-17k
-```
 
-Set local dataset paths. For OpenThoughts3, the MVP only needs 20k prompts, so one parquet/jsonl shard with at least 20k rows is enough. If your local download has a different file name, change `OPENTHOUGHTS_LOCAL_FILE` only.
-
-```bash
-mkdir -p data/prompts
-
-export OPENTHOUGHTS_LOCAL_FILE=$(find data/raw_datasets/OpenThoughts3-1.2M -type f \( -name "*.parquet" -o -name "*.jsonl" \) | sort | head -n 1)
 export DAPO_PROMPTS=data/raw_datasets/dapo-math-17k/dapo-math-17k.jsonl
-
-test -f "${OPENTHOUGHTS_LOCAL_FILE}"
+test -f data/prompts/openthoughts3_mvp20k.jsonl
 test -f "${DAPO_PROMPTS}"
 ```
 
-Extract a 20k SFT prompt subset from the local OpenThoughts3 file:
+If you already have a small local OpenThoughts3 parquet/jsonl shard, you may use it instead of streaming:
 
 ```bash
 python scripts/prepare_sft_prompts.py \
-  --input "${OPENTHOUGHTS_LOCAL_FILE}" \
+  --input /path/to/local/openthoughts-shard.parquet \
   --output data/prompts/openthoughts3_mvp20k.jsonl \
   --num-samples 20000
 ```
