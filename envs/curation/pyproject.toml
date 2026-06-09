@@ -1,0 +1,17 @@
+[project]
+name = "lightning-opd-curation-env"
+version = "0.1.0"
+description = "Data curation environment for Lightning OPD MVP runs."
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "datasets",
+    "huggingface-hub",
+    "pandas",
+    "pyarrow",
+    "tqdm",
+    "transformers",
+    "vllm>=0.8.5 ; sys_platform == 'linux'",
+]
+
+[tool.uv]
+package = false

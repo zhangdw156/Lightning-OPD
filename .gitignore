@@ -28,3 +28,6 @@ checkpoints/
 *.sqsh
 *.parquet
 wandb/
+
+# Nested uv environments for stage-specific MVP deps
+envs/*/uv.lock

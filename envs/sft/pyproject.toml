@@ -1,0 +1,17 @@
+[project]
+name = "lightning-opd-sft-env"
+version = "0.1.0"
+description = "LlamaFactory SFT environment for Lightning OPD MVP runs."
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "datasets",
+    "deepspeed ; sys_platform == 'linux'",
+    "huggingface-hub",
+    "liger-kernel ; sys_platform == 'linux'",
+    "llamafactory",
+    "torch>=2.0 ; sys_platform == 'linux'",
+    "transformers",
+]
+
+[tool.uv]
+package = false

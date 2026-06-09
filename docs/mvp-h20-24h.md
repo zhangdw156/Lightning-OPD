@@ -8,25 +8,34 @@ This MVP is a shortened, end-to-end reproduction path for one 4-GPU H20 node. It
 - Student: `Qwen/Qwen3-4B-Base`.
 - Teacher: `Qwen/Qwen3-8B`.
 - Teacher consistency: the same `Qwen/Qwen3-8B` is used for SFT data generation and teacher-logprob precomputation.
-- Single environment policy: run root `uv sync` once on the GPU server; do not create separate curation/SFT environments.
+- Environment policy: use stage-specific uv projects; curation, SFT, and OPD each keep their own dependency surface.
 
 ## Server setup
 
+Use stage-specific uv environments instead of one large all-in-one environment. This keeps `vllm` isolated to curation and `llamafactory`/`deepspeed` isolated to SFT.
+
 ```bash
 cd /path/to/Lightning-OPD
-uv sync
-source .venv/bin/activate
 
 export MODEL_ROOT=/data/zhangdw12/models
 export STUDENT_BASE_MODEL=${MODEL_ROOT}/Qwen3-4B-Base
 export TEACHER_MODEL=${MODEL_ROOT}/Qwen3-8B
+
+# Stage 0/1/3: data prompt prep, teacher SFT-data generation, and rollout collection.
+uv sync --project envs/curation
+
+# Stage 2: LlamaFactory SFT only.
+uv sync --project envs/sft
+
+# Stage 4/5/6: Lightning OPD precompute/training/conversion only.
+uv sync
 ```
 
-This project declares the curation, SFT, and Lightning OPD dependencies in the root `pyproject.toml`, including `vllm`, `llamafactory`, `deepspeed`, `pandas`, `pyarrow`, `tqdm`, and `huggingface-hub`. The MVP commands use local model paths under `${MODEL_ROOT}` and should not download Qwen model weights again.
+Do not run root `uv sync` expecting it to install `vllm` or `llamafactory`: those are intentionally outside the root project.
 
-If your local model directory names differ, adjust only `STUDENT_BASE_MODEL` and `TEACHER_MODEL`.
+The MVP commands use local model paths under `${MODEL_ROOT}` and should not download Qwen model weights again. If your local model directory names differ, adjust only `STUDENT_BASE_MODEL` and `TEACHER_MODEL`.
 
-If you run with `uv sync --locked`, update `uv.lock` on the GPU server first because this MVP changes `pyproject.toml` dependencies.
+`uv.lock` files generated under `envs/*/` are ignored; they are stage-local environment artifacts.
 
 ## Stage 0: prepare local prompts without downloading full OpenThoughts3
 
@@ -38,7 +47,7 @@ DAPO-Math-17k is small enough to download as JSONL and is used later as OPD prom
 mkdir -p data/prompts data/raw_datasets
 
 # Stream only 20k prompts from OpenThoughts3; this avoids downloading the 14GB+ full dataset.
-python scripts/prepare_sft_prompts.py \
+envs/curation/.venv/bin/python scripts/prepare_sft_prompts.py \
   --hf-dataset open-thoughts/OpenThoughts3-1.2M \
   --streaming \
   --streaming-buffer-size 10000 \
@@ -46,7 +55,7 @@ python scripts/prepare_sft_prompts.py \
   --num-samples 20000
 
 # Download only the DAPO JSONL prompt file(s), not a full dataset snapshot.
-hf download zhuzilin/dapo-math-17k \
+envs/curation/.venv/bin/hf download zhuzilin/dapo-math-17k \
   --repo-type dataset \
   --include "*.jsonl" \
   --local-dir data/raw_datasets/dapo-math-17k
@@ -59,7 +68,7 @@ test -f "${DAPO_PROMPTS}"
 If you already have a small local OpenThoughts3 parquet/jsonl shard, you may use it instead of streaming:
 
 ```bash
-python scripts/prepare_sft_prompts.py \
+envs/curation/.venv/bin/python scripts/prepare_sft_prompts.py \
   --input /path/to/local/openthoughts-shard.parquet \
   --output data/prompts/openthoughts3_mvp20k.jsonl \
   --num-samples 20000
@@ -75,7 +84,7 @@ SFT_PROMPTS=data/prompts/openthoughts3_mvp20k.jsonl \
 OUTPUT_DIR=data/sft_data_mvp_h20_raw \
 NUM_GPUS=4 \
 TP_SIZE=1 \
-bash scripts/generate_sft_data.sh \
+PATH="$PWD/envs/curation/.venv/bin:$PATH" bash scripts/generate_sft_data.sh \
   --max-tokens 4096 \
   --temperature 0.7 \
   --top-p 0.9 \
@@ -85,7 +94,7 @@ bash scripts/generate_sft_data.sh \
 Merge to the dataset name expected by the MVP LlamaFactory config:
 
 ```bash
-python data_curation/merge.py \
+envs/curation/.venv/bin/python data_curation/merge.py \
   --input-dir data/sft_data_mvp_h20_raw \
   --output data/sft_data/openthoughts3_mvp20k_qwen3-8b.parquet \
   --max-tokens 8192
@@ -102,7 +111,7 @@ OUTPUT_DIR=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20 \
 NUM_NODES=1 \
 NUM_GPUS=4 \
 MASTER_ADDR=localhost \
-bash configs/sft/run_sft.sh
+PATH="$PWD/envs/sft/.venv/bin:$PATH" bash configs/sft/run_sft.sh
 ```
 
 Pick the latest or best checkpoint under:
@@ -127,7 +136,7 @@ OPD_PROMPTS="${DAPO_PROMPTS}" \
 OUTPUT_DIR=data/rollouts_mvp_h20_raw \
 NUM_GPUS=4 \
 TP_SIZE=1 \
-bash scripts/collect_rollouts.sh \
+PATH="$PWD/envs/curation/.venv/bin:$PATH" bash scripts/collect_rollouts.sh \
   --num-samples 6400 \
   --max-tokens 2048 \
   --temperature 0.8 \
@@ -138,7 +147,7 @@ bash scripts/collect_rollouts.sh \
 Merge:
 
 ```bash
-python data_curation/merge.py \
+envs/curation/.venv/bin/python data_curation/merge.py \
   --input-dir data/rollouts_mvp_h20_raw \
   --output data/rollouts/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts.parquet \
   --max-tokens 2048
@@ -156,7 +165,7 @@ TEACHER_MODEL="${TEACHER_MODEL}" \
 TEACHER_TP=4 \
 MAX_RESPONSE_LEN=2048 \
 CONCURRENCY=32 \
-bash scripts/precompute_teacher_logprobs_4b.sh
+PATH="$PWD/.venv/bin:$PATH" bash scripts/precompute_teacher_logprobs_4b.sh
 ```
 
 Expected final file:
@@ -173,7 +182,7 @@ After this stage, the teacher server is no longer needed.
 export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/<checkpoint-dir>
 export LIGHTNING_OPD_DATA=data/lightning_opd_mvp_h20/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts-lightning-opd-precomputed.parquet
 
-python configs/lightning_opd/qwen3-4b-lightning-opd-mvp-h20.py
+.venv/bin/python configs/lightning_opd/qwen3-4b-lightning-opd-mvp-h20.py
 ```
 
 The MVP OPD config uses:
@@ -194,7 +203,7 @@ Use the saved iteration you want, for example `iter_0000050`.
 MEGATRON_CKPT_DIR=/root/models/Qwen3-4B-Base-Open-Thoughts-Qwen3-8B-sft-mvp-h20_ckpt__qwen3-4b-lightning-opd-mvp-h20/iter_0000050 \
 HF_OUTPUT_DIR=checkpoints/qwen3-4b-lightning-opd-mvp-h20-hf \
 ORIGIN_HF_DIR="${SFT_CHECKPOINT}" \
-bash scripts/convert_megatron_to_hf.sh
+PATH="$PWD/.venv/bin:$PATH" bash scripts/convert_megatron_to_hf.sh
 ```
 
 ## Success criteria
