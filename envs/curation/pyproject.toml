@@ -10,6 +10,12 @@ dependencies = [
     "pyarrow",
     "tqdm",
     "transformers",
+]
+
+[project.optional-dependencies]
+# Keep vLLM optional for MVP runs: the H20 server uses a pre-validated
+# external vLLM environment via VLLM_PYTHON to avoid CUDA/driver drift.
+vllm = [
     "vllm>=0.8.5 ; sys_platform == 'linux'",
 ]
 

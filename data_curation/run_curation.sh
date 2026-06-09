@@ -42,11 +42,27 @@
 # Environment variables (optional):
 #   NUM_NODES   – total number of nodes (default: 1)
 #   NODE_RANK   – rank of this node (default: 0)
+#   VLLM_PYTHON – Python executable from a vLLM-capable environment
 # ──────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_VLLM_PYTHON="/data/zhangdw12/work/uv-venv/qwen35-vllm019/bin/python"
+
+if [[ -n "${VLLM_PYTHON:-}" ]]; then
+    PYTHON_BIN="${VLLM_PYTHON}"
+elif [[ -x "${DEFAULT_VLLM_PYTHON}" ]]; then
+    PYTHON_BIN="${DEFAULT_VLLM_PYTHON}"
+else
+    PYTHON_BIN="${PYTHON:-python}"
+fi
+
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+    echo "Python executable not found: ${PYTHON_BIN}" >&2
+    echo "Set VLLM_PYTHON to a Python executable in a vLLM-capable environment." >&2
+    exit 1
+fi
 
 # ── Parse --num-gpus and --tensor-parallel-size from args ─────────────────
 NUM_GPUS=1
@@ -76,6 +92,7 @@ echo "  GPUs per node:    ${NUM_GPUS}"
 echo "  TP size:          ${TP}"
 echo "  Workers per node: ${WORKERS_PER_NODE}"
 echo "  World size:       ${WORLD_SIZE}"
+echo "  Python:           ${PYTHON_BIN}"
 echo "  Pipeline args:    ${PIPELINE_ARGS[*]}"
 echo "============================"
 
@@ -98,7 +115,7 @@ for (( LOCAL=0; LOCAL<WORKERS_PER_NODE; LOCAL++ )); do
     CUDA_VISIBLE_DEVICES="${GPUS}" \
     RANK="${GLOBAL_RANK}" \
     WORLD_SIZE="${WORLD_SIZE}" \
-    python "${SCRIPT_DIR}/pipeline.py" \
+    "${PYTHON_BIN}" "${SCRIPT_DIR}/pipeline.py" \
         --rank "${GLOBAL_RANK}" \
         --world-size "${WORLD_SIZE}" \
         "${PIPELINE_ARGS[@]}" \

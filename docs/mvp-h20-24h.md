@@ -20,8 +20,9 @@ cd /path/to/Lightning-OPD
 export MODEL_ROOT=/data/zhangdw12/models
 export STUDENT_BASE_MODEL=${MODEL_ROOT}/Qwen3-4B-Base
 export TEACHER_MODEL=${MODEL_ROOT}/Qwen3-8B
+export VLLM_PYTHON=/data/zhangdw12/work/uv-venv/qwen35-vllm019/bin/python
 
-# Stage 0/1/3: data prompt prep, teacher SFT-data generation, and rollout collection.
+# Stage 0 and merge utilities only. vLLM inference uses VLLM_PYTHON above.
 uv sync --project envs/curation
 
 # Stage 2: LlamaFactory SFT only.
@@ -31,7 +32,18 @@ uv sync --project envs/sft
 uv sync
 ```
 
-Do not run root `uv sync` expecting it to install `vllm` or `llamafactory`: those are intentionally outside the root project.
+Do not run root `uv sync` expecting it to install `vllm` or `llamafactory`: those are intentionally outside the root project. The MVP curation workers use `VLLM_PYTHON`, which should point to the verified vLLM environment above; this avoids accidentally resolving a newer vLLM/PyTorch wheel that requires a newer NVIDIA driver than the H20 server provides. Only use `uv sync --project envs/curation --extra vllm` if you intentionally want uv to resolve a fresh vLLM stack.
+
+Verify the vLLM environment before launching workers:
+
+```bash
+"${VLLM_PYTHON}" - <<'PY'
+import torch, vllm
+print("python", __import__("sys").executable)
+print("vllm", vllm.__version__)
+print("torch", torch.__version__, "cuda", torch.version.cuda)
+PY
+```
 
 The MVP commands use local model paths under `${MODEL_ROOT}` and should not download Qwen model weights again. If your local model directory names differ, adjust only `STUDENT_BASE_MODEL` and `TEACHER_MODEL`.
 
@@ -76,7 +88,7 @@ envs/curation/.venv/bin/python scripts/prepare_sft_prompts.py \
 
 ## Stage 1: generate MVP SFT data
 
-Run one vLLM worker per GPU. H20 96GB should fit Qwen3-8B per GPU; keep `TP_SIZE=1` for throughput.
+Run one vLLM worker per GPU through `VLLM_PYTHON`. H20 96GB should fit Qwen3-8B per GPU; keep `TP_SIZE=1` for throughput.
 
 ```bash
 TEACHER_MODEL="${TEACHER_MODEL}" \
@@ -84,7 +96,8 @@ SFT_PROMPTS=data/prompts/openthoughts3_mvp20k.jsonl \
 OUTPUT_DIR=data/sft_data_mvp_h20_raw \
 NUM_GPUS=4 \
 TP_SIZE=1 \
-PATH="$PWD/envs/curation/.venv/bin:$PATH" bash scripts/generate_sft_data.sh \
+VLLM_PYTHON="${VLLM_PYTHON}" \
+bash scripts/generate_sft_data.sh \
   --max-tokens 4096 \
   --temperature 0.7 \
   --top-p 0.9 \
@@ -136,7 +149,8 @@ OPD_PROMPTS="${DAPO_PROMPTS}" \
 OUTPUT_DIR=data/rollouts_mvp_h20_raw \
 NUM_GPUS=4 \
 TP_SIZE=1 \
-PATH="$PWD/envs/curation/.venv/bin:$PATH" bash scripts/collect_rollouts.sh \
+VLLM_PYTHON="${VLLM_PYTHON}" \
+bash scripts/collect_rollouts.sh \
   --num-samples 6400 \
   --max-tokens 2048 \
   --temperature 0.8 \

@@ -15,6 +15,7 @@
 # Optional:
 #   NUM_GPUS       - Number of GPUs to use (default: 8)
 #   TP_SIZE        - Tensor parallel size per worker (default: 1)
+#   VLLM_PYTHON    - Python executable from a vLLM-capable environment
 #
 # Extra args are passed through to data_curation/pipeline.py, e.g.:
 #   bash scripts/collect_rollouts.sh --num-samples 10
