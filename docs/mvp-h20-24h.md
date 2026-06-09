@@ -115,7 +115,7 @@ envs/curation/.venv/bin/python data_curation/merge.py \
 
 ## Stage 2: MVP SFT
 
-This config runs 300 SFT steps on 4 GPUs with cutoff length 8192 and global batch 64.
+This config runs 300 SFT steps on 4 GPUs with cutoff length 8192 and global batch 64. It uses DeepSpeed ZeRO-2 with CPU optimizer offload to reduce per-GPU optimizer/gradient memory pressure during full-parameter SFT.
 
 ```bash
 CONFIG_YAML=qwen3-4b-base-open-thoughts3-qwen3-8b-mvp-h20.yaml \

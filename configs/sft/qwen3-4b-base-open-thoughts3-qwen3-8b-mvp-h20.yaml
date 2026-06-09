@@ -8,7 +8,7 @@ model_name_or_path: Qwen/Qwen3-4B-Base
 stage: sft
 do_train: true
 finetuning_type: full
-deepspeed: examples/deepspeed/ds_z0_config.json
+deepspeed: examples/deepspeed/ds_z2_offload_config.json
 enable_liger_kernel: true
 packing: true
 
