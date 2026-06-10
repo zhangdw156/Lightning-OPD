@@ -4,6 +4,14 @@ from pathlib import Path
 
 
 class VllmServerRolloutScriptsTest(unittest.TestCase):
+    def test_sft_export_script_copies_standalone_model_and_normalizes_tokenizer_config(self):
+        script = Path("scripts/export_sft_model.sh").read_text()
+        self.assertIn('EXPORT_DIR', script)
+        self.assertIn('extra_special_tokens', script)
+        self.assertIn('data["extra_special_tokens"] = {}', script)
+        self.assertIn('shutil.copy2(item, target)', script)
+        self.assertNotIn('target.symlink_to', script)
+
     def test_run_curation_uses_vllm_serve_when_server_mode_enabled(self):
         script = Path("data_curation/run_curation.sh").read_text()
         self.assertIn('source "${VLLM_VENV}/bin/activate"', script)
@@ -28,6 +36,7 @@ class VllmServerRolloutScriptsTest(unittest.TestCase):
         self.assertIn('"--max-tokens-per-gpu 16384 "', config)
 
         docs = Path("docs/mvp-h20-24h.md").read_text()
+        self.assertIn("Qwen3-4B-Base-SFT", docs)
         self.assertIn("--num-samples 12800", docs)
         self.assertIn("--max-tokens 8192", docs)
         self.assertIn("MAX_RESPONSE_LEN=8192", docs)

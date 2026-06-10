@@ -127,16 +127,15 @@ MASTER_ADDR=localhost \
 PATH="$PWD/envs/sft/.venv/bin:$PATH" bash configs/sft/run_sft.sh
 ```
 
-Pick the latest or best checkpoint under:
+Use the final HF-format SFT directory and export a standalone model under `${MODEL_ROOT}`. This keeps the training checkpoint immutable, gives later stages a stable model name, and normalizes tokenizer metadata for the vLLM environment.
 
 ```bash
-ls -dt checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/* | head
-```
+export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20
+export SFT_MODEL=${MODEL_ROOT}/Qwen3-4B-Base-SFT
 
-Export it for later stages:
-
-```bash
-export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/<checkpoint-dir>
+SFT_CHECKPOINT="${SFT_CHECKPOINT}" \
+EXPORT_DIR="${SFT_MODEL}" \
+bash scripts/export_sft_model.sh
 ```
 
 ## Stage 3: collect effect-oriented rollouts
@@ -144,7 +143,7 @@ export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/<checkpoint
 Collect 12.8k OPD prompts, matching the H20 Lightning OPD config: `100 rollout steps * 128 batch = 12800 samples`. Use 8192-token responses for the first effect-oriented run after the SFT stage succeeds.
 
 ```bash
-SFT_CHECKPOINT="${SFT_CHECKPOINT}" \
+SFT_CHECKPOINT="${SFT_MODEL}" \
 OPD_PROMPTS="${DAPO_PROMPTS}" \
 OUTPUT_DIR=data/rollouts_mvp_h20_raw \
 NUM_GPUS=4 \
@@ -174,7 +173,7 @@ envs/curation/.venv/bin/python data_curation/merge.py \
 The 8B teacher server now defaults to `${MODEL_ROOT}/Qwen3-8B`; for 4 H20 GPUs use `TEACHER_TP=4`.
 
 ```bash
-SFT_CHECKPOINT="${SFT_CHECKPOINT}" \
+SFT_CHECKPOINT="${SFT_MODEL}" \
 ROLLOUT_PARQUET=data/rollouts/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts.parquet \
 OUTPUT_DIR=data/lightning_opd_mvp_h20 \
 TEACHER_MODEL="${TEACHER_MODEL}" \
@@ -195,7 +194,7 @@ After this stage, the teacher server is no longer needed.
 ## Stage 5: MVP Lightning OPD training
 
 ```bash
-export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/<checkpoint-dir>
+export SFT_CHECKPOINT=${SFT_MODEL}
 export LIGHTNING_OPD_DATA=data/lightning_opd_mvp_h20/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts-lightning-opd-precomputed.parquet
 
 .venv/bin/python configs/lightning_opd/qwen3-4b-lightning-opd-mvp-h20.py
