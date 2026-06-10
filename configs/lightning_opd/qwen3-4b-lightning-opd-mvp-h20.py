@@ -1,12 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""4x H20 96GB MVP Lightning OPD config.
+"""4x H20 96GB effect-oriented Lightning OPD config.
 
-This config is intentionally smaller than the paper setting so the full
-SFT -> rollout -> teacher-logprob -> Lightning OPD loop can fit a 24h MVP run.
-It demonstrates the Lightning OPD mechanism; it is not intended to reproduce
-paper table numbers.
+This config keeps the one-node H20 reproduction path but uses a longer rollout
+than the minimal smoke-test MVP: 12.8k samples and 8192-token responses. It is
+intended for a more meaningful first OPD run after the SFT stage succeeds.
 
 Required env vars:
   SFT_CHECKPOINT     HF-format SFT checkpoint from the MVP SFT stage.
@@ -50,10 +49,10 @@ def execute(rerun=True):
         "--input-key prompt "
         "--label-key label "
         "--rollout-shuffle "
-        "--num-rollout 50 "
+        "--num-rollout 100 "
         "--rollout-batch-size 128 "
         "--n-samples-per-prompt 1 "
-        "--rollout-max-response-len 2048 "
+        "--rollout-max-response-len 8192 "
         "--global-batch-size 128 "
     )
 
@@ -74,7 +73,7 @@ def execute(rerun=True):
         "--recompute-method uniform "
         "--recompute-num-layers 1 "
         "--use-dynamic-batch-size "
-        "--max-tokens-per-gpu 12288 "
+        "--max-tokens-per-gpu 16384 "
     )
 
     grpo_args = (

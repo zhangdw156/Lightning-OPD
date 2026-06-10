@@ -139,9 +139,9 @@ Export it for later stages:
 export SFT_CHECKPOINT=checkpoints/qwen3-4b-base-sft-qwen3-8b-mvp-h20/<checkpoint-dir>
 ```
 
-## Stage 3: collect MVP rollouts
+## Stage 3: collect effect-oriented rollouts
 
-Collect 6.4k OPD prompts, matching the MVP Lightning OPD config: `50 rollout steps * 128 batch = 6400 samples`.
+Collect 12.8k OPD prompts, matching the H20 Lightning OPD config: `100 rollout steps * 128 batch = 12800 samples`. Use 8192-token responses for the first effect-oriented run after the SFT stage succeeds.
 
 ```bash
 SFT_CHECKPOINT="${SFT_CHECKPOINT}" \
@@ -151,8 +151,8 @@ NUM_GPUS=4 \
 TP_SIZE=1 \
 VLLM_VENV=/data/zhangdw12/work/uv-venv/qwen35-vllm019 \
 bash scripts/collect_rollouts.sh \
-  --num-samples 6400 \
-  --max-tokens 2048 \
+  --num-samples 12800 \
+  --max-tokens 8192 \
   --temperature 0.8 \
   --top-p 1.0 \
   --batch-size 16
@@ -166,7 +166,7 @@ Merge:
 envs/curation/.venv/bin/python data_curation/merge.py \
   --input-dir data/rollouts_mvp_h20_raw \
   --output data/rollouts/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts.parquet \
-  --max-tokens 2048
+  --max-tokens 8192
 ```
 
 ## Stage 4: precompute teacher logprobs
@@ -179,7 +179,7 @@ ROLLOUT_PARQUET=data/rollouts/dapo-math-17k-qwen3-4b-sft-mvp-h20-rollouts.parque
 OUTPUT_DIR=data/lightning_opd_mvp_h20 \
 TEACHER_MODEL="${TEACHER_MODEL}" \
 TEACHER_TP=4 \
-MAX_RESPONSE_LEN=2048 \
+MAX_RESPONSE_LEN=8192 \
 CONCURRENCY=32 \
 PATH="$PWD/.venv/bin:$PATH" bash scripts/precompute_teacher_logprobs_4b.sh
 ```
@@ -205,18 +205,18 @@ The MVP OPD config uses:
 
 - 4 actor GPUs.
 - Tensor parallel size 2.
-- 50 OPD steps.
+- 100 OPD steps.
 - Rollout batch size 128.
 - Global batch size 128.
-- Max response length 2048.
+- Max response length 8192.
 - No live teacher server during OPD training.
 
 ## Stage 6: convert MVP Megatron checkpoint to HuggingFace
 
-Use the saved iteration you want, for example `iter_0000050`.
+Use the saved iteration you want, for example `iter_0000100`.
 
 ```bash
-MEGATRON_CKPT_DIR=/root/models/Qwen3-4B-Base-Open-Thoughts-Qwen3-8B-sft-mvp-h20_ckpt__qwen3-4b-lightning-opd-mvp-h20/iter_0000050 \
+MEGATRON_CKPT_DIR=/root/models/Qwen3-4B-Base-Open-Thoughts-Qwen3-8B-sft-mvp-h20_ckpt__qwen3-4b-lightning-opd-mvp-h20/iter_0000100 \
 HF_OUTPUT_DIR=checkpoints/qwen3-4b-lightning-opd-mvp-h20-hf \
 ORIGIN_HF_DIR="${SFT_CHECKPOINT}" \
 PATH="$PWD/.venv/bin:$PATH" bash scripts/convert_megatron_to_hf.sh

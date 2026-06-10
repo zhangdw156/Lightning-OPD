@@ -20,6 +20,18 @@ class VllmServerRolloutScriptsTest(unittest.TestCase):
         self.assertIn("completion_tokens", pipeline)
         self.assertIn("urllib.request.urlopen", pipeline)
 
+    def test_h20_lightning_opd_config_matches_long_rollout_experiment(self):
+        config = Path("configs/lightning_opd/qwen3-4b-lightning-opd-mvp-h20.py").read_text()
+        self.assertIn('"--num-rollout 100 "', config)
+        self.assertIn('"--rollout-batch-size 128 "', config)
+        self.assertIn('"--rollout-max-response-len 8192 "', config)
+        self.assertIn('"--max-tokens-per-gpu 16384 "', config)
+
+        docs = Path("docs/mvp-h20-24h.md").read_text()
+        self.assertIn("--num-samples 12800", docs)
+        self.assertIn("--max-tokens 8192", docs)
+        self.assertIn("MAX_RESPONSE_LEN=8192", docs)
+
     def test_shell_scripts_parse_after_server_mode_changes(self):
         for path in ["data_curation/run_curation.sh", "scripts/collect_rollouts.sh"]:
             result = subprocess.run(["bash", "-n", path], text=True, capture_output=True)
