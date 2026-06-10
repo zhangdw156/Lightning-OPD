@@ -15,7 +15,10 @@
 # Optional:
 #   NUM_GPUS       - Number of GPUs to use (default: 8)
 #   TP_SIZE        - Tensor parallel size per worker (default: 1)
-#   VLLM_PYTHON    - Python executable from a vLLM-capable environment
+#   VLLM_VENV      - vLLM virtualenv used for `source .../activate` before `vllm serve`
+#                    (default: /data/zhangdw12/work/uv-venv/qwen35-vllm019)
+#   VLLM_USE_SERVER - Use vLLM OpenAI-compatible server mode (default: 1 for rollouts)
+#   VLLM_BASE_PORT - First vLLM server port; rank is added (default: 18000)
 #
 # Extra args are passed through to data_curation/pipeline.py, e.g.:
 #   bash scripts/collect_rollouts.sh --num-samples 10
@@ -33,7 +36,13 @@ OUTPUT_DIR="$(mkdir -p "${OUTPUT_DIR}" && cd "${OUTPUT_DIR}" && pwd)"
 
 NUM_GPUS="${NUM_GPUS:-8}"
 TP_SIZE="${TP_SIZE:-1}"
+# Rollout collection uses served vLLM by default so the SFT environment does not
+# import vLLM directly. Override VLLM_USE_SERVER=0 only for the legacy offline path.
+VLLM_USE_SERVER="${VLLM_USE_SERVER:-1}"
+VLLM_VENV="${VLLM_VENV:-/data/zhangdw12/work/uv-venv/qwen35-vllm019}"
 
+VLLM_USE_SERVER="${VLLM_USE_SERVER}" \
+VLLM_VENV="${VLLM_VENV}" \
 bash data_curation/run_curation.sh \
     --model "${SFT_CHECKPOINT}" \
     --input "${OPD_PROMPTS}" \

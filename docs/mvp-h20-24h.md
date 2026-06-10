@@ -149,7 +149,7 @@ OPD_PROMPTS="${DAPO_PROMPTS}" \
 OUTPUT_DIR=data/rollouts_mvp_h20_raw \
 NUM_GPUS=4 \
 TP_SIZE=1 \
-VLLM_PYTHON="${VLLM_PYTHON}" \
+VLLM_VENV=/data/zhangdw12/work/uv-venv/qwen35-vllm019 \
 bash scripts/collect_rollouts.sh \
   --num-samples 6400 \
   --max-tokens 2048 \
@@ -157,6 +157,8 @@ bash scripts/collect_rollouts.sh \
   --top-p 1.0 \
   --batch-size 16
 ```
+
+`collect_rollouts.sh` defaults to `VLLM_USE_SERVER=1`: each shard activates `${VLLM_VENV}/bin/activate`, starts a per-rank `vllm serve` on `VLLM_BASE_PORT + rank`, then queries the OpenAI-compatible `/v1/chat/completions` endpoint. Set `VLLM_USE_SERVER=0` only if you intentionally want the legacy in-process vLLM path.
 
 Merge:
 
